@@ -1,0 +1,11 @@
+item_id,name,category,price,spicy,vegetarian,protein,light_meal,available
+1,Doro Wat,Main Course,280,true,false,chicken,false,true
+2,Shiro,Main Course,120,true,true,legumes,true,true
+3,Special Tibs,Main Course,350,true,false,beef,false,true
+4,Vegetable Salad,Salad,100,false,true,none,true,true
+5,Chicken Sandwich,Snack,180,false,false,chicken,true,true
+6,Chechebsa,Breakfast,150,true,true,grains,false,true
+7,Enkulal Firfir,Breakfast,200,true,false,eggs,false,true
+8,Fresh Juice,Drink,80,false,true,none,true,true
+9,Misir Wot,Main Course,130,true,true,legumes,true,true
+10,Grilled Chicken,Main Course,300,false,false,chicken,false,true
