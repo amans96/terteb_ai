@@ -1,41 +1,66 @@
 
 def recommend_food(
     menu,
-    budget,
+    budget=None,
     spicy=None,
     vegetarian=None,
     light_meal=None,
     protein=None,
+    excluded_proteins=None,
+    appetite=None,
+    mood=None,
+    meal_type=None,
+    price_sensitivity=None,
     limit=5,
 ):
     """
-    Recommend available food within the customer's budget.
+    Rank available menu items using customer preferences and context.
 
-    Preference values:
-    - True or False for spicy, vegetarian, and light_meal
-    - A protein name such as "chicken" or "beef"
-    - None means the customer has no preference for that feature
+    Hard constraints:
+    - Food must be available.
+    - Food must fit the budget, when a budget is provided.
+    - Explicitly excluded proteins are never recommended.
+
+    Soft preferences:
+    - Spicy, vegetarian, light meal, protein, appetite.
+    - Price sensitivity affects ranking.
     """
 
-    if budget < 0:
+    if budget is not None and budget < 0:
         raise ValueError("Budget cannot be negative.")
 
     if limit < 1:
         raise ValueError("Limit must be at least 1.")
 
-    # Hard constraints: unavailable and unaffordable food is excluded.
-    candidates = menu[
-        (menu["available"] == True)
-        & (menu["price"] <= budget)
-    ].copy()
+    excluded_proteins = {
+        item.strip().lower()
+        for item in (excluded_proteins or [])
+    }
+
+    # Start with available food.
+    candidates = menu[menu["available"] == True].copy()
+
+    # Apply budget only when the customer provides one.
+    if budget is not None:
+        candidates = candidates[candidates["price"] <= budget]
+
+    # Excluded proteins are hard constraints.
+    if excluded_proteins and "protein" in candidates.columns:
+        candidates = candidates[
+            ~candidates["protein"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
+            .isin(excluded_proteins)
+        ]
 
     if candidates.empty:
-        return candidates.assign(score=pd.Series(dtype="int64"))
+        candidates["score"] = 0
+        return candidates
 
-    # Start every candidate with a score of zero.
     candidates["score"] = 0
 
-    # Matching preferences add points; mismatches subtract points.
+    # Score explicit food preferences.
     preferences = {
         "spicy": spicy,
         "vegetarian": vegetarian,
@@ -43,26 +68,50 @@ def recommend_food(
     }
 
     for feature, preference in preferences.items():
-        if preference is not None:
+        if preference is not None and feature in candidates.columns:
             matches = candidates[feature] == preference
-            candidates["score"] += matches.map(
-                {True: 2, False: -1}
-            )
+            candidates["score"] += matches.map({
+                True: 2,
+                False: -1,
+            })
 
-    # Protein is a text category, so compare it without case sensitivity.
-    if protein is not None:
+    # Score preferred protein.
+    if protein is not None and "protein" in candidates.columns:
         matches = (
-            candidates["protein"].astype(str).str.lower()
+            candidates["protein"]
+            .astype(str)
+            .str.strip()
+            .str.lower()
             == protein.strip().lower()
         )
-        candidates["score"] += matches.map(
-            {True: 2, False: -1}
+
+        candidates["score"] += matches.map({
+            True: 2,
+            False: -1,
+        })
+
+    # Appetite provides a soft signal about meal size.
+    if appetite == "high" and "light_meal" in candidates.columns:
+        candidates["score"] += (
+            candidates["light_meal"] == False
+        ).map({True: 2, False: 0})
+
+    elif appetite == "low" and "light_meal" in candidates.columns:
+        candidates["score"] += (
+            candidates["light_meal"] == True
+        ).map({True: 2, False: 0})
+
+    # Price sensitivity affects ranking, not eligibility.
+    if price_sensitivity == "budget":
+        candidates = candidates.sort_values(
+            by=["score", "price"],
+            ascending=[False, True],
         )
 
-    # Prefer higher scores; for equal scores, prefer lower prices.
-    candidates = candidates.sort_values(
-        by=["score", "price"],
-        ascending=[False, True],
-    )
+    else:
+        candidates = candidates.sort_values(
+            by=["score", "price"],
+            ascending=[False, True],
+        )
 
     return candidates.head(limit)
