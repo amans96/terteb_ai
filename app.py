@@ -2,7 +2,7 @@
 import streamlit as st
 
 from src.data_loader import load_menu
-from src.intent_parser import understand_request
+from src.llm_client import understand_food_request
 from src.recommender import recommend_food
 
 
@@ -11,6 +11,7 @@ st.set_page_config(
     page_icon="🍽️",
     layout="centered",
 )
+
 
 @st.cache_data
 def get_menu():
@@ -34,8 +35,10 @@ except (FileNotFoundError, ValueError) as error:
 
 message = st.text_area(
     "What would you like to eat?",
-    placeholder="Example: I'm starving, feeling tired, "
-                "and have 350 birr. I want chicken, not spicy.",
+    placeholder=(
+        "Example: I'm starving, feeling tired, "
+        "and have 350 birr. I want chicken, not spicy."
+    ),
     height=120,
 )
 
@@ -45,16 +48,30 @@ limit = st.selectbox(
     index=1,
 )
 
+
 if st.button("Find my food", type="primary"):
+
     if not message.strip():
         st.warning("Tell me what you're looking for first.")
+
     else:
         try:
-            intent = understand_request(message)
+            # 1. Let the LLM understand the customer's message.
+            intent = understand_food_request(message)
 
             st.subheader("What I understood")
             st.json(intent)
 
+            # 2. Check whether this request is for food recommendations.
+            if intent["intent"] != "recommend_food":
+                st.info(
+                    "This request is not a food recommendation "
+                    "request yet. We'll support other ordering "
+                    "actions in a later stage."
+                )
+                st.stop()
+
+            # 3. Pass the LLM's structured output to Python.
             recommendations = recommend_food(
                 menu=menu,
                 budget=intent["budget"],
@@ -70,6 +87,7 @@ if st.button("Find my food", type="primary"):
                 limit=limit,
             )
 
+            # 4. Display recommendations from the real menu.
             st.subheader("Your food recommendations")
 
             if recommendations.empty:
@@ -77,6 +95,7 @@ if st.button("Find my food", type="primary"):
                     "I couldn't find suitable available dishes. "
                     "Try changing your preferences or budget."
                 )
+
             else:
                 for _, dish in recommendations.iterrows():
                     with st.container(border=True):
@@ -86,9 +105,13 @@ if st.button("Find my food", type="primary"):
                         st.write(f"**Score:** {dish['score']}")
 
             st.caption(
-                "This prototype uses rule-based intent detection "
-                "and recommendation scoring. It is not yet a trained ML model."
+                "Terteb uses an LLM to understand requests "
+                "and a Python recommendation engine to rank "
+                "real menu items."
             )
 
         except (ValueError, KeyError) as error:
             st.error(f"Something went wrong: {error}")
+
+        except Exception as error:
+            st.error(f"Could not process your request: {error}")
